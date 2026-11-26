@@ -469,7 +469,7 @@ table.tbl tr.now td{color:var(--accent)}
     </div>
   </section>
 
-  <footer>Catatan tersimpan di browser ini saja. Kalau ganti HP atau data browser dibersihkan, catatan ikut hilang, jadi simpan cadangannya sesekali.</footer>
+  <footer>Catatan tersimpan di akunmu (cloud) dan disalin di perangkat ini. Tetap simpan cadangan sesekali.</footer>
 </div>
 <div id="kunci" class="kunci" hidden>
   <form id="pin-form" class="kunci-box" autocomplete="off">
@@ -535,7 +535,7 @@ header{align-items:center}
 <div id="au-str" class="au-str" hidden><i></i></div>
 <button id="au-go" type="button">Masuk</button>
 <p id="au-msg" class="au-msg" role="status"></p>
-<p class="au-links"><a href="#" id="au-mode-lupa">Lupa password?</a><a href="#" id="au-mode-login" hidden>&larr; Kembali ke masuk</a></p>
+<p class="au-links"><a href="#" id="au-resend" hidden>Kirim ulang email verifikasi</a><a href="#" id="au-mode-lupa">Lupa password?</a><a href="#" id="au-mode-login" hidden>&larr; Kembali ke masuk</a></p>
 </div></div>
 <div id="sheet" hidden><div class="sh-box"><h3 id="sh-t" style="margin:0 0 6px"></h3><p id="sh-p" class="rs" style="margin:0 0 16px"></p><div class="actions"><button class="btn" id="sh-no" type="button">Batal</button><button class="btn" id="sh-ok" type="button"></button></div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -1661,13 +1661,20 @@ header{align-items:center}
       else r = SB.auth.updateUser({password:p});
       r.then(function(x){
         busy(false);
-        if(x.error){ msg(/Invalid login/i.test(x.error.message) ? "Email atau password salah." : x.error.message); return; }
+        if(x.error){
+          var em = x.error.message || "", rs = $("au-resend"); rs.hidden = true;
+          if(/Invalid login/i.test(em)) em = "Email atau password salah.";
+          else if(/not confirmed/i.test(em)){ em = "Email belum diverifikasi. Buka link di emailmu (cek spam)."; rs.hidden = false; }
+          else if(/rate limit/i.test(em)) em = "Terlalu banyak email terkirim. Tunggu sekitar 1 jam, lalu coba lagi.";
+          else if(/already registered/i.test(em)) em = "Email ini sudah terdaftar. Silakan masuk.";
+          msg(em); return; }
         if(m0 === "reg" && !x.data.session){ authMode("login"); msg("Akun dibuat! Cek emailmu untuk verifikasi, lalu masuk.", 1); }
         else if(m0 === "lupa") msg("Link reset dikirim. Cek emailmu (termasuk folder spam).", 1);
         else if(m0 === "login") msg("Berhasil masuk, memuat data...", 1);
       }).catch(function(){ busy(false); msg("Tidak bisa terhubung. Cek koneksi internetmu."); });
     }
     $("au-go").onclick = kirim;
+    $("au-resend").onclick = function(ev){ ev.preventDefault(); SB.auth.resend({type:"signup", email:$("au-email").value.trim()}).then(function(x){ if(x.error) msg(/rate limit/i.test(x.error.message) ? "Batas kirim email tercapai. Coba lagi nanti." : x.error.message); else { msg("Email verifikasi dikirim ulang.", 1); $("au-resend").hidden = true; } }); };
     ["au-email", "au-pass", "au-nama"].forEach(function(id){ $(id).addEventListener("keydown", function(e){ if(e.key === "Enter") kirim(); }); });
     function menu(b){ $("akun-menu").hidden = !b; $("akun-btn").setAttribute("aria-expanded", b); }
     $("akun-btn").onclick = function(e){ e.stopPropagation(); menu($("akun-menu").hidden); };
@@ -1709,7 +1716,7 @@ header{align-items:center}
         b.removeAttribute("data-ok");
         SB.auth.getSession().then(function(s){
           return fetch("/.netlify/functions/admin-delete-user", {method:"POST", headers:{"Content-Type":"application/json", Authorization:"Bearer " + s.data.session.access_token}, body:JSON.stringify({id:id})});
-        }).then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || "Gagal menghapus"); }); })
+        }).then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ if(!r.ok) throw new Error(j.error || (r.status === 404 ? "Fungsi server belum aktif di Netlify." : "Gagal menghapus (kode " + r.status + ")")); }); })
           .then(cloud.loadAdmin, function(er){ toast(er.message); });
         return;
       }
